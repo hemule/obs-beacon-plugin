@@ -1579,22 +1579,11 @@ static int SendConnectPacket(RTMP *r, RTMPPacket *cp)
 	}
 	if (r->Link.extras.o_num) {
 		int i;
-		/* The optional user arguments must be a single AMF value (RTMP spec
-         * 7.2.1.1). Wrap the extras props as members of an anonymous object,
-         * otherwise a bare name+value is misread as a Number and breaks connect. */
-		if (enc + 1 >= pend)
-			return FALSE;
-		*enc++ = AMF_OBJECT;
 		for (i = 0; i < r->Link.extras.o_num; i++) {
 			enc = AMFProp_Encode(&r->Link.extras.o_props[i], enc, pend);
 			if (!enc)
 				return FALSE;
 		}
-		if (enc + 3 >= pend)
-			return FALSE;
-		*enc++ = 0;
-		*enc++ = 0;
-		*enc++ = AMF_OBJECT_END; /* 00 00 09 */
 	}
 	packet.m_nBodySize = enc - packet.m_body;
 

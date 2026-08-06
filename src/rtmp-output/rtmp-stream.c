@@ -1187,24 +1187,36 @@ static int try_connect(struct rtmp_stream *stream)
 	set_rtmp_dstr(&stream->rtmp.Link.flashVer, &stream->encoder_name);
 	stream->rtmp.Link.swfUrl = stream->rtmp.Link.tcUrl;
 
-	/* Beacon: attach the app identifier to the RTMP connect user_arguments via
-	 * librtmp's Link.extras (encoded after the connect command object). Static
-	 * storage is safe: SendConnectPacket only reads these props and librtmp never
-	 * frees Link.extras; re-set on every (re)connect so it is idempotent. */
+	/* Beacon: attach {app, streamSessionId} to the RTMP connect user_arguments.
+	 * librtmp's stock SendConnectPacket appends each Link.extras prop verbatim
+	 * after the command object; a bare *named* prop there is invalid (its name
+	 * length is misread as a type marker). So we wrap the two named props inside
+	 * one anonymous AMF_OBJECT prop (p_name.av_len == 0): the unmodified encoder
+	 * then emits `03 <props> 00 00 09`, a single valid AMF value per RTMP spec
+	 * 7.2.1.1. Static storage is safe — librtmp only reads Link.extras and never
+	 * frees it; re-set on every (re)connect so it stays idempotent. */
 	{
-		AMFObjectProperty *props = stream->beacon_connect_props;
-		props[0].p_name.av_val = (char *)"app";
-		props[0].p_name.av_len = 3;
-		props[0].p_type = AMF_STRING;
-		props[0].p_vu.p_aval.av_val = (char *)"obs-beacon";
-		props[0].p_vu.p_aval.av_len = (int)strlen(props[0].p_vu.p_aval.av_val);
-		props[1].p_name.av_val = (char *)"streamSessionId";
-		props[1].p_name.av_len = 15;
-		props[1].p_type = AMF_STRING;
-		props[1].p_vu.p_aval.av_val = stream->beacon_session_id;
-		props[1].p_vu.p_aval.av_len = (int)strlen(stream->beacon_session_id);
-		stream->rtmp.Link.extras.o_props = props;
-		stream->rtmp.Link.extras.o_num = 2;
+		AMFObjectProperty *user = stream->beacon_user_props;
+		user[0].p_name.av_val = (char *)"app";
+		user[0].p_name.av_len = 3;
+		user[0].p_type = AMF_STRING;
+		user[0].p_vu.p_aval.av_val = (char *)"obs-beacon";
+		user[0].p_vu.p_aval.av_len = (int)strlen(user[0].p_vu.p_aval.av_val);
+		user[1].p_name.av_val = (char *)"streamSessionId";
+		user[1].p_name.av_len = 15;
+		user[1].p_type = AMF_STRING;
+		user[1].p_vu.p_aval.av_val = stream->beacon_session_id;
+		user[1].p_vu.p_aval.av_len = (int)strlen(stream->beacon_session_id);
+
+		AMFObjectProperty *wrap = &stream->beacon_extras_prop;
+		wrap->p_name.av_val = NULL;
+		wrap->p_name.av_len = 0; /* anonymous -> encoder writes no name */
+		wrap->p_type = AMF_OBJECT;
+		wrap->p_vu.p_object.o_props = user;
+		wrap->p_vu.p_object.o_num = 2;
+
+		stream->rtmp.Link.extras.o_props = wrap;
+		stream->rtmp.Link.extras.o_num = 1;
 	}
 	info("Beacon: connect user_arguments app=obs-beacon streamSessionId=%s", stream->beacon_session_id);
 

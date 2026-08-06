@@ -133,9 +133,14 @@ struct rtmp_stream {
 	os_event_t *send_thread_signaled_exit;
 
 	/* Beacon: stream-session id (GUID) minted once per start and kept stable
-	 * across reconnects, plus the connect user_arguments props it feeds. */
+	 * across reconnects, plus the connect user_arguments it feeds to librtmp.
+	 * The user fields (app, streamSessionId) are named props of an inner object;
+	 * that inner object is wrapped in a single anonymous AMF_OBJECT prop so the
+	 * stock librtmp encoder emits one valid AMF value after the command object
+	 * (RTMP spec 7.2.1.1) — no librtmp change needed. */
 	char beacon_session_id[40];
-	AMFObjectProperty beacon_connect_props[2];
+	AMFObjectProperty beacon_user_props[2]; /* named: app, streamSessionId */
+	AMFObjectProperty beacon_extras_prop;   /* anonymous AMF_OBJECT wrapping them */
 };
 
 #ifdef _WIN32
