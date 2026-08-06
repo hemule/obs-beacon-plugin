@@ -1197,7 +1197,7 @@ static int try_connect(struct rtmp_stream *stream)
 		props[0].p_name.av_len = 3;
 		props[0].p_type = AMF_STRING;
 		props[0].p_vu.p_aval.av_val = (char *)"obs-beacon";
-		props[0].p_vu.p_aval.av_len = 19;
+		props[0].p_vu.p_aval.av_len = (int)strlen(props[0].p_vu.p_aval.av_val);
 		props[1].p_name.av_val = (char *)"streamSessionId";
 		props[1].p_name.av_len = 15;
 		props[1].p_type = AMF_STRING;
