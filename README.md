@@ -67,6 +67,31 @@ cp -R "build_macos/RelWithDebInfo/obs-beacon.plugin" \
 Restart OBS, then enable the panel via **Docks → Beacon**. Open the log with
 the **Open log…** button in the dock.
 
+### Opening the unsigned build on macOS (Gatekeeper)
+
+The prebuilt macOS artifacts from CI are **not signed with an Apple Developer ID
+and not notarized**, so when you download them macOS quarantines the files and
+Gatekeeper warns that the developer cannot be verified (and OBS may silently
+refuse to load the plugin). This is expected for an unsigned build — the code is
+unchanged, it just lacks Apple's signature. Clear the quarantine once, any of
+these ways:
+
+- **Terminal (most reliable for the `.plugin` bundle):** after copying it into the
+  plugins folder, strip the quarantine attribute recursively:
+  ```bash
+  xattr -dr com.apple.quarantine \
+    "$HOME/Library/Application Support/obs-studio/plugins/obs-beacon.plugin"
+  ```
+- **`.pkg` installer:** right-click it in Finder → **Open** → **Open** (the
+  right-click path offers an "Open anyway" button that a plain double-click does
+  not), or approve it under **System Settings → Privacy & Security → Open Anyway**
+  right after macOS blocks it.
+
+Then restart OBS. (To remove the warning entirely for everyone, the build has to
+be signed with a Developer ID certificate and notarized — the CI already supports
+this once Apple Developer credentials are added as repository secrets; see the
+codesigning notes below.)
+
 ## Stream metadata / routing through the Beacon output
 
 The `app` / `streamSessionId` (AMF) and glass-to-glass SEI are only injected when streaming
@@ -137,6 +162,32 @@ output signals run on arbitrary threads and only touch mutex-guarded state.
   vendored RTMP output built `NO_CRYPTO`). Only macOS (universal arm64 + x86_64) has
   been exercised at runtime — Windows/Linux are confirmed to *compile and link* but
   the diagnostics/routing paths have not been run there yet.
+- **macOS artifacts are unsigned / not notarized.** They trigger a Gatekeeper
+  warning on download; see [Opening the unsigned build on macOS](#opening-the-unsigned-build-on-macos-gatekeeper).
+
+### macOS code signing & notarization (optional)
+
+The CI is already wired to sign and notarize the macOS build; it stays a no-op
+(ad-hoc signing only) until Apple Developer credentials exist as **repository
+secrets**. To enable it: enrol in the Apple Developer Program, create a
+**Developer ID Application** and a **Developer ID Installer** certificate, export
+both (with their private keys) into a single `.p12`, and add these secrets under
+*Settings → Secrets and variables → Actions*:
+
+| Secret | Value |
+|---|---|
+| `MACOS_SIGNING_APPLICATION_IDENTITY` | `Developer ID Application: <Name> (<TEAMID>)` |
+| `MACOS_SIGNING_INSTALLER_IDENTITY` | `Developer ID Installer: <Name> (<TEAMID>)` |
+| `MACOS_SIGNING_CERT` | base64 of the `.p12` (`base64 -i cert.p12 | pbcopy`) |
+| `MACOS_SIGNING_CERT_PASSWORD` | the `.p12` export password |
+| `MACOS_KEYCHAIN_PASSWORD` | any random string (temporary CI keychain) |
+| `MACOS_NOTARIZATION_USERNAME` | your Apple ID e-mail |
+| `MACOS_NOTARIZATION_PASSWORD` | an app-specific password for that Apple ID |
+
+Signing then runs on every push to `main`; **notarization runs only for a version
+tag** (`git tag 0.1.0 && git push origin 0.1.0`), which also produces a draft
+GitHub Release with signed, notarized, stapled artifacts that install without any
+Gatekeeper prompt.
 
 ## License
 
